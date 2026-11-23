@@ -44,6 +44,17 @@ async function quote(j){
    const price=num(r.closePrice),pct=num(r.fluctuationsRatio);
    if(!Number.isFinite(price)||!Number.isFinite(pct))throw Error();
    data={price,pct,date:r.localTradedAt,source:'네이버 증권'};
+   if(j.section==='us' && j.url.includes('/stock/')) {
+     const extra=r.overMarketPriceInfo;
+     const session={PRE_MARKET:'장전',AFTER_MARKET:'장후',POST_MARKET:'장후'}[extra?.tradingSessionType];
+     const extendedPrice=num(extra?.overPrice), extendedRatio=num(extra?.fluctuationsRatio);
+     if(session && Date.parse(extra.localTradedAt)>Date.parse(r.localTradedAt)
+         && Number.isFinite(extendedPrice) && extendedPrice>0 && Number.isFinite(extendedRatio)){
+       data={price:extendedPrice,pct:extendedRatio,date:extra.localTradedAt,source:'네이버 증권 · '+session};
+     }else{
+       data.source='네이버 증권 · 정규장';
+     }
+   }
    if(j.history)try{data.candles=(await get(j.history)).map(x=>[x.localTradedAt,...['openPrice','highPrice','lowPrice','closePrice'].map(k=>num(x[k]))]).filter(x=>x.slice(1).every(Number.isFinite)).reverse().slice(-24)}catch{}
  }catch{}
  if((data.price==null||j.history&&!data.candles?.length)&&j.yahoo)try{const y=await yahoo(j.yahoo); data=data.price==null?y:{...data,candles:y.candles}}catch{}
@@ -84,3 +95,4 @@ if(rows.filter(x=>x.price!=null&&!x.stale).length<rows.length/2)throw Error('시
 const snapshot={at:new Date().toISOString(),rows,news:articles};
 await fs.writeFile(path,JSON.stringify(snapshot));
 console.log('시세',rows.length,'미수신',rows.filter(x=>x.price==null).map(x=>x.name),'차트',rows.filter(x=>x.group==='지수').map(x=>x.candles?.length),'뉴스',articles.kr.length,articles.us.length);
+
